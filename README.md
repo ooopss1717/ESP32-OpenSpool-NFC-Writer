@@ -1,6 +1,6 @@
 # ESP32-OpenSpool-NFC-Writer
 Standalone OpenSpool NFC writer using ESP32 + PN532
-# This is a first attempt from my hand at this, so please forgive my stupidity (where aplicable)
+# This is my first attempt at this, so i know Theres plenty room for improvement and please forgive any stupidity (where applicable 😄).
 
 ![ESP32](https://img.shields.io/badge/ESP32-S2-blue)
 ![NFC](https://img.shields.io/badge/NFC-PN532-green)
