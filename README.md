@@ -9,6 +9,9 @@ Standalone OpenSpool NFC writer using ESP32 + PN532
 
 Standalone OpenSpool NFC writer/reader with UI.
 
+## 📸 Device
+
+![device](images/device.jpg)
 ---
 
 ## ✨ Features
