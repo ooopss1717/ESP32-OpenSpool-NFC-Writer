@@ -1,0 +1,67 @@
+<!-- save as images/wiring.svg -->
+<svg width="900" height="600" xmlns="http://www.w3.org/2000/svg">
+
+<style>
+.label { font-family: Arial; font-size: 14px; fill: #fff; }
+.title { font-size: 20px; fill: #0ff; }
+.box { fill: #222; stroke: #888; stroke-width: 2; }
+.line { stroke-width: 3; }
+</style>
+
+<rect width="100%" height="100%" fill="#111"/>
+
+<text x="300" y="40" class="title">ESP32 OpenSpool NFC Writer Wiring</text>
+
+<!-- ESP32 -->
+<rect x="350" y="200" width="200" height="200" class="box"/>
+<text x="385" y="230" class="label">ESP32-S2</text>
+
+<!-- TFT -->
+<rect x="50" y="150" width="200" height="150" class="box"/>
+<text x="70" y="170" class="label">ST7789 TFT</text>
+
+<!-- PN532 -->
+<rect x="650" y="150" width="200" height="150" class="box"/>
+<text x="690" y="170" class="label">PN532 NFC</text>
+
+<!-- Encoder -->
+<rect x="350" y="450" width="200" height="100" class="box"/>
+<text x="370" y="470" class="label">Encoder + Buttons</text>
+
+<!-- Lines TFT -->
+<line x1="250" y1="180" x2="350" y2="250" class="line" stroke="#f00"/>
+<text x="260" y="180" class="label">SCLK → GPIO10</text>
+
+<line x1="250" y1="210" x2="350" y2="270" class="line" stroke="#0f0"/>
+<text x="260" y="210" class="label">MOSI → GPIO11</text>
+
+<line x1="250" y1="240" x2="350" y2="290" class="line" stroke="#0ff"/>
+<text x="260" y="240" class="label">CS → GPIO12</text>
+
+<line x1="250" y1="270" x2="350" y2="310" class="line" stroke="#ff0"/>
+<text x="260" y="270" class="label">DC → GPIO16</text>
+
+<line x1="250" y1="300" x2="350" y2="330" class="line" stroke="#f0f"/>
+<text x="260" y="300" class="label">RST → GPIO17</text>
+
+<!-- PN532 -->
+<line x1="650" y1="200" x2="550" y2="260" class="line" stroke="#0ff"/>
+<text x="570" y="200" class="label">SDA → GPIO33</text>
+
+<line x1="650" y1="240" x2="550" y2="280" class="line" stroke="#ff0"/>
+<text x="570" y="240" class="label">SCL → GPIO34</text>
+
+<!-- Encoder -->
+<line x1="450" y1="450" x2="450" y2="400" class="line" stroke="#fff"/>
+<text x="460" y="420" class="label">A → GPIO2</text>
+
+<line x1="480" y1="450" x2="480" y2="400" class="line" stroke="#fff"/>
+<text x="490" y="420" class="label">B → GPIO3</text>
+
+<line x1="510" y1="450" x2="510" y2="400" class="line" stroke="#0f0"/>
+<text x="520" y="420" class="label">Select → GPIO7</text>
+
+<line x1="540" y1="450" x2="540" y2="400" class="line" stroke="#f00"/>
+<text x="550" y="420" class="label">Back → GPIO5</text>
+
+</svg>
