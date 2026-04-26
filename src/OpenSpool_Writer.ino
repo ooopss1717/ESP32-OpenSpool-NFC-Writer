@@ -176,7 +176,7 @@ char readJsonBuffer[320];
 const char* typeOptions[] = {"PLA", "PETG", "ABS", "TPU", "ASA"};
 const int typeCount = sizeof(typeOptions) / sizeof(typeOptions[0]);
 
-const char* subtypeOptions[] = {"Basic", "Matte", "Silk", "CF", "95A"};
+const char* subtypeOptions[] = {"Basic", "Matte", "Silk", "CF", "GF", "LW", "95A"};
 const int subtypeCount = sizeof(subtypeOptions) / sizeof(subtypeOptions[0]);
 
 const char* colorNames[] = {"White", "Black", "Gray", "Red", "Blue", "Green", "Yellow", "Orange", "Natural"};
@@ -2160,7 +2160,7 @@ void setup() {
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("OPENSPOOL WRITER v2.3- READY");
+  Serial.println("OPENSPOOL WRITER v0.9 - READY");
   Serial.println("Use NTAG215 or NTAG216");
   Serial.println("Read / Write / Verify enabled");
   Serial.println("Clone mode enabled");
