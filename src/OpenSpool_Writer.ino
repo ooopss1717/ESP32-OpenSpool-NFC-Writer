@@ -6,13 +6,19 @@
 #include <Adafruit_PN532.h>
 
 // ============================================================
-// OpenSpool Writer / Reader - CLEAN FULL VERSION
+// ESP32 OpenSpool NFC Writer / Reader - COMPLETE VERSION
 // ESP32-S2 + ST7789 + PN532 I2C
 //
-// KEY0 = select / OK   (GPIO7)
-// KEY1 = back / hold home (GPIO5)
+// KEY0 = select / OK        GPIO7
+// KEY1 = back / hold home   GPIO5
 //
-// OpenSpool minimal JSON format
+// Supports:
+// - OpenSpool NDEF application/json tags
+// - RAW fallback / eSUN-style U1-compatible tags
+// - NTAG215 / NTAG216 write, read, verify, clone
+// - Generic profile library
+// - Custom profiles in flash
+// - Partial redraw UI
 // ============================================================
 
 // =========================
@@ -64,7 +70,7 @@ Preferences prefs;
 
 // =========================
 // Backlight PWM
-// Arduino ESP32 core 3.x compatible style
+// ESP32 Arduino Core 3.x style
 // =========================
 const int BL_FREQ = 5000;
 const int BL_RES  = 8;
@@ -112,7 +118,6 @@ TagProfile genericProfiles[] = {
   {"Generic PLA Matte Black", "Generic", "PLA",  "Matte", "#111111", "FF", 195, 225, 50,  60,  1000},
   {"Generic PLA Silk Gold",   "Generic", "PLA",  "Silk",  "#D4AF37", "FF", 205, 225, 50,  60,  1000},
   {"Generic PLA CF Black",    "Generic", "PLA",  "CF",    "#101010", "FF", 210, 240, 45,  60,  1000},
-  {"Generic PLA LW Natural",  "Generic", "PLA",  "LW",    "#F2EFE9", "FF", 220, 270, 55,  60,  1000},
 
   {"Generic PETG White",      "Generic", "PETG", "Basic", "#FFFFFF", "FF", 230, 250, 70,  85,  1000},
   {"Generic PETG Black",      "Generic", "PETG", "Basic", "#111111", "FF", 230, 250, 70,  85,  1000},
@@ -176,7 +181,7 @@ char readJsonBuffer[320];
 const char* typeOptions[] = {"PLA", "PETG", "ABS", "TPU", "ASA"};
 const int typeCount = sizeof(typeOptions) / sizeof(typeOptions[0]);
 
-const char* subtypeOptions[] = {"Basic", "Matte", "Silk", "CF", "GF", "LW", "95A"};
+const char* subtypeOptions[] = {"Basic", "Matte", "Silk", "CF", "95A"};
 const int subtypeCount = sizeof(subtypeOptions) / sizeof(subtypeOptions[0]);
 
 const char* colorNames[] = {"White", "Black", "Gray", "Red", "Blue", "Green", "Yellow", "Orange", "Natural"};
@@ -327,6 +332,23 @@ void printHexLine(const uint8_t* data, size_t len) {
     if (i + 1 < len) Serial.print(' ');
   }
   Serial.println();
+}
+
+void cleanCString(char* s) {
+  if (!s) return;
+
+  size_t len = strlen(s);
+  while (len > 0 && (s[len - 1] == ' ' || s[len - 1] == '\0' || s[len - 1] == '\r' || s[len - 1] == '\n')) {
+    s[len - 1] = '\0';
+    len--;
+  }
+
+  char* start = s;
+  while (*start == ' ') start++;
+
+  if (start != s) {
+    memmove(s, start, strlen(start) + 1);
+  }
 }
 
 bool waitForTag(uint8_t *uid, uint8_t *uidLength, unsigned long timeoutMs) {
@@ -522,6 +544,12 @@ void activateCustomProfile(int idx) {
 }
 
 void normalizeProfile(TagProfile& p) {
+  cleanCString(p.brand);
+  cleanCString(p.type);
+  cleanCString(p.subtype);
+  cleanCString(p.colorHex);
+  cleanCString(p.alpha);
+
   if (!strlen(p.brand)) strncpy(p.brand, "Generic", sizeof(p.brand) - 1);
   if (!strlen(p.type)) strncpy(p.type, "PETG", sizeof(p.type) - 1);
   if (!strlen(p.subtype)) strncpy(p.subtype, "Basic", sizeof(p.subtype) - 1);
@@ -896,6 +924,9 @@ bool verifyCurrentPayload() {
   return true;
 }
 
+// ============================================================
+// Read tag helpers - NDEF + RAW fallback
+// ============================================================
 bool readLikelyNdefFromTag(char* outJson, size_t outJsonSize) {
   uint8_t raw[384];
   memset(raw, 0, sizeof(raw));
@@ -978,12 +1009,110 @@ bool readLikelyNdefFromTag(char* outJson, size_t outJsonSize) {
   return true;
 }
 
-bool readProfileFromTag(TagProfile& outProfile) {
-  if (!readLikelyNdefFromTag(readJsonBuffer, sizeof(readJsonBuffer))) {
-    return false;
+bool readRawFallbackProfile(TagProfile& outProfile) {
+  uint8_t raw[384];
+  memset(raw, 0, sizeof(raw));
+
+  const uint8_t startPage = 4;
+  const int maxPagesToRead = 80;
+
+  for (int i = 0; i < maxPagesToRead; i++) {
+    uint8_t pageData[4];
+    if (!readSinglePage4(startPage + i, pageData)) {
+      Serial.print("RAW fallback read fail page ");
+      Serial.println(startPage + i);
+      return false;
+    }
+    memcpy(&raw[i * 4], pageData, 4);
   }
 
-  return parseOpenSpoolJsonToProfile(readJsonBuffer, outProfile);
+  Serial.println("RAW fallback bytes:");
+  printHexLine(raw, 128);
+
+  clearProfile(outProfile);
+
+  // eSUN / U1-style fixed layout observed from working dump:
+  // Page 05: brand, e.g. eSUN
+  // Page 0A-0C: subtype, e.g. Lightweight
+  // Page 0F: type, e.g. PLA
+  memcpy(outProfile.brand, &raw[(0x05 - 4) * 4], 4);
+  outProfile.brand[4] = '\0';
+  cleanCString(outProfile.brand);
+
+  memcpy(outProfile.subtype, &raw[(0x0A - 4) * 4], 12);
+  outProfile.subtype[12] = '\0';
+  cleanCString(outProfile.subtype);
+
+  memcpy(outProfile.type, &raw[(0x0F - 4) * 4], 4);
+  outProfile.type[4] = '\0';
+  cleanCString(outProfile.type);
+
+  // Try to locate JSON or JSON fragment anywhere in raw memory.
+  // If a complete-ish JSON exists, this will fill temps/color/etc.
+  char rawText[385];
+  memset(rawText, 0, sizeof(rawText));
+  memcpy(rawText, raw, 384);
+
+  char* jsonStart = strchr(rawText, '{');
+  if (jsonStart) {
+    TagProfile parsed;
+    clearProfile(parsed);
+    if (parseOpenSpoolJsonToProfile(jsonStart, parsed)) {
+      if (strlen(parsed.brand)) strncpy(outProfile.brand, parsed.brand, sizeof(outProfile.brand) - 1);
+      if (strlen(parsed.type)) strncpy(outProfile.type, parsed.type, sizeof(outProfile.type) - 1);
+      if (strlen(parsed.subtype)) strncpy(outProfile.subtype, parsed.subtype, sizeof(outProfile.subtype) - 1);
+      if (strlen(parsed.colorHex)) strncpy(outProfile.colorHex, parsed.colorHex, sizeof(outProfile.colorHex) - 1);
+      if (strlen(parsed.alpha)) strncpy(outProfile.alpha, parsed.alpha, sizeof(outProfile.alpha) - 1);
+      outProfile.minTemp = parsed.minTemp;
+      outProfile.maxTemp = parsed.maxTemp;
+      outProfile.bedMin = parsed.bedMin;
+      outProfile.bedMax = parsed.bedMax;
+      outProfile.weight = parsed.weight;
+    }
+  } else {
+    // Scan partial fragment for known fields.
+    // This handles dumps where page 4 is not a complete JSON start.
+    jsonGetStringValue(rawText, "brand", outProfile.brand, sizeof(outProfile.brand));
+    jsonGetStringValue(rawText, "type", outProfile.type, sizeof(outProfile.type));
+    jsonGetStringValue(rawText, "subtype", outProfile.subtype, sizeof(outProfile.subtype));
+    jsonGetStringValue(rawText, "color_hex", outProfile.colorHex, sizeof(outProfile.colorHex));
+    jsonGetIntValue(rawText, "min_temp", &outProfile.minTemp);
+    jsonGetIntValue(rawText, "max_temp", &outProfile.maxTemp);
+    jsonGetIntValue(rawText, "bed_min_temp", &outProfile.bedMin);
+    jsonGetIntValue(rawText, "bed_max_temp", &outProfile.bedMax);
+  }
+
+  normalizeProfile(outProfile);
+  buildProfileNameFromFields(outProfile);
+
+  Serial.println("RAW fallback profile:");
+  Serial.print("Brand: "); Serial.println(outProfile.brand);
+  Serial.print("Type: "); Serial.println(outProfile.type);
+  Serial.print("Subtype: "); Serial.println(outProfile.subtype);
+  Serial.print("Color: "); Serial.println(outProfile.colorHex);
+  Serial.print("Nozzle: "); Serial.print(outProfile.minTemp); Serial.print("-"); Serial.println(outProfile.maxTemp);
+  Serial.print("Bed: "); Serial.print(outProfile.bedMin); Serial.print("-"); Serial.println(outProfile.bedMax);
+
+  return strlen(outProfile.brand) > 0 || strlen(outProfile.type) > 0 || strlen(outProfile.subtype) > 0;
+}
+
+bool readProfileFromTag(TagProfile& outProfile) {
+  if (readLikelyNdefFromTag(readJsonBuffer, sizeof(readJsonBuffer))) {
+    if (parseOpenSpoolJsonToProfile(readJsonBuffer, outProfile)) {
+      Serial.println("NDEF OpenSpool read success");
+      return true;
+    }
+  }
+
+  Serial.println("NDEF failed -> trying RAW fallback");
+
+  if (readRawFallbackProfile(outProfile)) {
+    Serial.println("RAW fallback success");
+    return true;
+  }
+
+  Serial.println("All read methods failed");
+  return false;
 }
 
 bool prepareActiveProfilePayload() {
@@ -1611,12 +1740,12 @@ void readTagToActiveProfile() {
   clearProfile(parsed);
 
   setStatus("Reading...");
-  setResult("Reading NDEF JSON", lastUidStr, "");
+  setResult("Trying NDEF / RAW", lastUidStr, "");
   redrawCurrentParts();
 
   if (!readProfileFromTag(parsed)) {
     setStatus("READ FAIL");
-    setResult("No valid OpenSpool JSON", lastUidStr, "Unknown / locked tag");
+    setResult("No valid tag profile", lastUidStr, "Unknown / locked tag");
     return;
   }
 
@@ -1772,12 +1901,12 @@ void cloneTagReadNormalizeWrite() {
   clearProfile(cloned);
 
   setStatus("Reading source...");
-  setResult("Reading OpenSpool JSON", lastUidStr, "");
+  setResult("Trying NDEF / RAW", lastUidStr, "");
   redrawCurrentParts();
 
   if (!readProfileFromTag(cloned)) {
     setStatus("CLONE READ FAIL");
-    setResult("No valid OpenSpool JSON", lastUidStr, "Source not cloneable");
+    setResult("No valid tag profile", lastUidStr, "Source not cloneable");
     return;
   }
 
@@ -2140,10 +2269,10 @@ void setup() {
 
   tft.fillScreen(ST77XX_BLACK);
   drawCenteredText("OpenSpool Writer", 70, 3, COL_HILITE);
-  drawCenteredText("ESP32-S2, ST7789, PN532", 108, 2, COL_TEXT);
-  drawCenteredText("VERSION 2.3", 138, 2, COL_DIM);
+  drawCenteredText("ESP32-S2 + ST7789 + PN532", 108, 2, COL_TEXT);
+  drawCenteredText("NDEF + RAW FALLBACK", 138, 2, COL_DIM);
 
-  delay(2500);
+  delay(1600);
 
   loadCustomProfiles();
 
@@ -2160,10 +2289,11 @@ void setup() {
 
   Serial.println();
   Serial.println("========================================");
-  Serial.println("OPENSPOOL WRITER v0.9 - READY");
+  Serial.println("ESP32 OPENSPOOL NFC WRITER READY");
   Serial.println("Use NTAG215 or NTAG216");
-  Serial.println("Read / Write / Verify enabled");
-  Serial.println("Clone mode enabled");
+  Serial.println("Read NDEF OpenSpool enabled");
+  Serial.println("Read RAW/eSUN fallback enabled");
+  Serial.println("Write / Verify / Clone enabled");
   Serial.println("Generic + Custom(in flash) enabled");
   Serial.println("Edit / Update / Delete custom enabled");
   Serial.println("Robust encoder decode enabled");
@@ -2182,4 +2312,3 @@ void loop() {
   handleKey0Select();
   redrawCurrentParts();
 }
-
